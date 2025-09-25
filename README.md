@@ -1,7 +1,7 @@
 ## Duolingo
 
 
-I made this so I don't lose my 1000 day streak for 3 days I can't use my phone comming up, I'm not a terrible person D:
+I made this so I don't lose my 1000 day streak for 3 days I can't use my phone coming up, I'm not a terrible person D:
 
 ### 1) Install
 

@@ -18,6 +18,16 @@ pip install -r requirements.txt
 python .\duo_story_bot.py --chrome-user-data-dir "$env:LOCALAPPDATA\Google\Chrome\User Data" --chrome-profile-name "Default"
 ```
 
+If you are not already logged into Duolingo with that Chrome profile, provide your credentials once via CLI flags and the script
+will prompt for them in future runs if they are not saved:
+
+```powershell
+python .\duo_story_bot.py --username "name@example.com" --password "yourPassword"
+```
+
+Leaving out the `--password` flag will cause the script to prompt securely when login is required, so you do not have to store it
+in plain text.
+
 Notes:
 
 - If you use another Chrome profile, change `--chrome-profile-name` (e.g. `Profile 1`).
@@ -49,7 +59,9 @@ Create `config.json` like:
   "story_path": null,
   "headless": false,
   "max_steps": 200,
-  "wait_secs": 20
+  "wait_secs": 20,
+  "username": "name@example.com",
+  "password": "yourPassword"
 }
 ```
 

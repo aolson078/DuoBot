@@ -5,7 +5,8 @@ import random
 import sys
 import time
 from dataclasses import dataclass
-from typing import List, Optional
+from getpass import getpass
+from typing import List, Optional, Tuple
 
 from selenium import webdriver
 from selenium.webdriver import ChromeOptions
@@ -27,6 +28,8 @@ class BotConfig:
     story_path: Optional[str] = None  # e.g. "/en/es-juan-1" or full URL
     max_steps: int = 200
     wait_secs: int = 20
+    username: Optional[str] = None
+    password: Optional[str] = None
 
 
 def _options_from_config(cfg: BotConfig) -> ChromeOptions:
@@ -150,12 +153,127 @@ def _fill_text_input(driver) -> bool:
     return False
 
 
+def _find_first(driver, selectors: List[str]):
+    for sel in selectors:
+        try:
+            el = driver.find_element(By.CSS_SELECTOR, sel)
+            if el:
+                return el
+        except Exception:
+            continue
+    return None
+
+
+def _has_session_cookie(driver) -> bool:
+    try:
+        cookie = driver.get_cookie("jwt_token")
+        return bool(cookie and cookie.get("value"))
+    except Exception:
+        return False
+
+
+def _prompt_for_credentials(cfg: BotConfig) -> Tuple[str, str]:
+    username = cfg.username
+    password = cfg.password
+    if not username:
+        username = input("Duolingo username or email: ").strip()
+    if not password:
+        password = getpass("Duolingo password: ")
+    if not username or not password:
+        raise RuntimeError("Duolingo credentials are required to log in automatically.")
+    return username, password
+
+
+def _ensure_logged_in(driver, wait, cfg: BotConfig) -> None:
+    if _has_session_cookie(driver):
+        return
+
+    username, password = _prompt_for_credentials(cfg)
+
+    login_url = "https://www.duolingo.com/log-in"
+    driver.get(login_url)
+
+    def _wait_for_form(d):
+        return _find_first(
+            d,
+            [
+                "[data-test='email-input'] input",
+                "[data-test='email-input']",
+                "input[name='identifier']",
+                "input[name='login']",
+                "input[name='email']",
+                "input[name='username']",
+                "input[type='email']",
+                "input[autocomplete='username']",
+            ],
+        )
+
+    try:
+        email_input = wait.until(_wait_for_form)
+    except TimeoutException as exc:
+        raise RuntimeError("Could not load Duolingo login form.") from exc
+
+    try:
+        password_input = wait.until(
+            lambda d: _find_first(
+                d,
+                [
+                    "[data-test='password-input'] input",
+                    "[data-test='password-input']",
+                    "input[name='password']",
+                    "input[type='password']",
+                    "input[autocomplete='current-password']",
+                ],
+            )
+        )
+    except TimeoutException as exc:
+        raise RuntimeError("Could not locate the password input on Duolingo.") from exc
+
+    email_input.clear()
+    email_input.send_keys(username)
+
+    password_input.clear()
+    password_input.send_keys(password)
+
+    login_clicked = False
+    login_selectors = [
+        "button[data-test='register-button']",
+        "button[data-test='login-button']",
+        "button[data-test='have-account']",
+        "button[type='submit']",
+        "[data-test='confirm-button']",
+    ]
+    for sel in login_selectors:
+        btn = driver.find_elements(By.CSS_SELECTOR, sel)
+        if btn:
+            if _safe_click(driver, btn[0]):
+                login_clicked = True
+                break
+
+    if not login_clicked:
+        password_input.send_keys(Keys.ENTER)
+
+    try:
+        wait.until(lambda d: _has_session_cookie(d))
+    except TimeoutException as exc:
+        raise RuntimeError("Failed to log into Duolingo automatically.") from exc
+
+
 def run_story(cfg: BotConfig) -> None:
     options = _options_from_config(cfg)
     driver = webdriver.Chrome(options=options)
     wait = WebDriverWait(driver, cfg.wait_secs)
 
     try:
+        # Load Duolingo homepage to establish a session/login first
+        driver.get("https://www.duolingo.com/")
+        try:
+            wait.until(EC.presence_of_element_located((By.TAG_NAME, "body")))
+        except TimeoutException:
+            raise RuntimeError("Duolingo homepage failed to load")
+
+        _ensure_logged_in(driver, wait, cfg)
+
         target_url = (
             cfg.story_path
             if (cfg.story_path and cfg.story_path.startswith("http"))
@@ -284,6 +402,13 @@ def parse_args() -> BotConfig:
     parser.add_argument("--headless", action="store_true", help="Run Chrome in headless mode")
     parser.add_argument("--max-steps", type=int, default=200)
     parser.add_argument("--wait-secs", type=int, default=20)
+    parser.add_argument("--username", required=False, default=None, help="Duolingo username or email")
+    parser.add_argument(
+        "--password",
+        required=False,
+        default=None,
+        help="Duolingo password (leave empty to be prompted securely)",
+    )
     parser.add_argument(
         "--config",
         help="Path to JSON config with the same keys as CLI flags",
@@ -307,6 +432,8 @@ def parse_args() -> BotConfig:
         story_path=pick("story_path", None),
         max_steps=int(pick("max_steps", 200)),
         wait_secs=int(pick("wait_secs", 20)),
+        username=pick("username", None),
+        password=pick("password", None),
     )
 
 

@@ -1,6 +1,7 @@
-## Duolingo Story Streak Bot (Selenium, Windows)
+## Duolingo
 
-Keeps your daily streak by opening a Duolingo story and auto-advancing through it. Uses your existing Chrome profile (so you're already logged in).
+
+I made this so I don't lose my 1000 day streak for 3 days I can't use my phone comming up, I'm not a terrible person D:
 
 ### 1) Install
 
